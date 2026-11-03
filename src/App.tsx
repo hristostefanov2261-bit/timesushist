@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, BarChart3, CreditCard } from 'lucide-react';
-import { AppProvider, useAuth, useNotification } from './contexts/AppContext';
+import { Calendar, BarChart3, CreditCard, LogOut } from 'lucide-react';
+import { AppProvider, useNotification } from './contexts/AppContext';
 import { Calendar as CalendarView } from './components/Calendar';
 import { PeriodsView } from './components/PeriodsView';
 import { PaymentsView } from './components/PaymentsView';
@@ -10,15 +10,16 @@ import { SettingsModal } from './components/SettingsModal';
 import { Modal, Button } from './components/UI';
 import { useDataStore } from './hooks/useDataStore';
 import { useTelegramWebApp } from './hooks/useTelegramWebApp';
+import { useAuth } from './hooks/useAuth';
 import { Toast } from './components/UI';
 import './index.css';
 
 type Tab = 'calendar' | 'periods' | 'payments' | 'statistics';
 
 const AppContent: React.FC = () => {
-  const { userId, isAuthenticated, login } = useAuth();
+  const { user, token, isLoading: authLoading, isAuthenticated, authenticateTelegram, logout } = useAuth();
   const { addNotification, notifications } = useNotification();
-  const { isReady: telegramReady, user: telegramUser } = useTelegramWebApp();
+  const { isReady: telegramReady } = useTelegramWebApp();
   const {
     data,
     isLoading,
@@ -38,15 +39,15 @@ const AppContent: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showPeriodModal, setShowPeriodModal] = useState(false);
 
-  // Initialize auth on mount
+  // Аутентификация при загрузке приложения
   useEffect(() => {
-    if (!isAuthenticated && telegramReady) {
-      const mockTelegramData = telegramUser || {
-        user: { id: Math.random() * 1000000 },
-      };
-      login(mockTelegramData).catch(console.error);
+    if (!isAuthenticated && !authLoading && telegramReady) {
+      authenticateTelegram().catch((err) => {
+        console.error('Failed to authenticate:', err);
+        addNotification('Ошибка аутентификации', 'error');
+      });
     }
-  }, [isAuthenticated, login, telegramReady, telegramUser]);
+  }, [isAuthenticated, authLoading, telegramReady, authenticateTelegram, addNotification]);
 
   // Get current shift for editor
   const currentShift = selectedDate
@@ -60,12 +61,17 @@ const AppContent: React.FC = () => {
 
   const handleSaveShift = async (shiftData: any) => {
     try {
+      if (!user) {
+        addNotification('Требуется аутентификация', 'error');
+        return;
+      }
+
       if (currentShift) {
         updateShift(currentShift.id, shiftData);
         addNotification('Смена обновлена', 'success');
       } else {
         addShift({
-          user_id: userId || 'current-user',
+          user_id: user.id,
           ...shiftData,
         });
         addNotification('Смена добавлена', 'success');
@@ -91,8 +97,13 @@ const AppContent: React.FC = () => {
 
   const handleAddPayment = async (payment: any) => {
     try {
+      if (!user) {
+        addNotification('Требуется аутентификация', 'error');
+        return;
+      }
+
       await addPayment({
-        user_id: userId || 'current-user',
+        user_id: user.id,
         ...payment,
       });
       addNotification('Выплата добавлена', 'success');
@@ -114,6 +125,11 @@ const AppContent: React.FC = () => {
 
   const handleAddPeriod = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      addNotification('Требуется аутентификация', 'error');
+      return;
+    }
+
     const now = new Date();
     const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
@@ -122,7 +138,7 @@ const AppContent: React.FC = () => {
 
     try {
       addPeriod({
-        user_id: userId || 'current-user',
+        user_id: user.id,
         name: `Период ${now.toLocaleString('ru-RU', { month: 'long' })} ${now.getFullYear()}`,
         start_date: startDate,
         end_date: endDate,
@@ -139,12 +155,29 @@ const AppContent: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-neutral">
+        <div className="text-center px-4">
+          <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+            <Calendar size={32} className="text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">TimeSushist</h1>
+          <p className="text-gray-600 mb-6">Не удалось выполнить вход через Telegram</p>
+          <Button onClick={() => authenticateTelegram()}>
+            Попробовать ещё раз
+          </Button>
         </div>
       </div>
     );
