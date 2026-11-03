@@ -54,10 +54,10 @@ export const useAuth = () => {
       setIsLoading(true);
       setError(null);
 
-      // Получаем initData из Telegram
-      const initData = telegramWebApp.webApp?.initData;
+      // Получаем initData из Telegram через публичный метод
+      const initDataRaw = window.Telegram?.WebApp?.initData;
 
-      if (!initData) {
+      if (!initDataRaw) {
         throw new Error('Telegram initData not available');
       }
 
@@ -67,7 +67,7 @@ export const useAuth = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ initData }),
+        body: JSON.stringify({ initData: initDataRaw }),
       });
 
       if (!response.ok) {
@@ -99,7 +99,7 @@ export const useAuth = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [telegramWebApp]);
+  }, []);
 
   // Logout
   const logout = useCallback(() => {
