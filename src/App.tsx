@@ -43,23 +43,27 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     let mounted = true;
 
-    if (!isAuthenticated && !authLoading && telegramReady) {
-      authenticateTelegram()
-        .then(() => {
+    const attemptAuth = async () => {
+      if (!isAuthenticated && !authLoading) {
+        try {
+          console.log('🔐 Attempting authentication...');
+          await authenticateTelegram();
           if (mounted) console.log('✅ Authentication successful');
-        })
-        .catch((err) => {
+        } catch (err) {
           if (mounted) {
             console.error('Failed to authenticate:', err);
             addNotification('Ошибка аутентификации', 'error');
           }
-        });
-    }
+        }
+      }
+    };
+
+    attemptAuth();
 
     return () => {
       mounted = false;
     };
-  }, [isAuthenticated, authLoading, telegramReady]);
+  }, [isAuthenticated, authLoading]);
 
   // Get current shift for editor
   const currentShift = selectedDate

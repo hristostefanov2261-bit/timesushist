@@ -21,7 +21,7 @@ const AUTH_TOKEN_KEY = 'timesushist_auth_token';
 const AUTH_USER_KEY = 'timesushist_auth_user';
 
 export const useAuth = () => {
-  const { telegramWebApp, isReady } = useTelegramWebApp();
+  const { initDataUnsafe, isReady } = useTelegramWebApp();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +38,7 @@ export const useAuth = () => {
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
         setIsAuthenticated(true);
+        console.log('✅ Restored session from localStorage');
       } catch (err) {
         console.error('Failed to restore auth:', err);
         localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -48,26 +49,33 @@ export const useAuth = () => {
     setIsLoading(false);
   }, []);
 
-  // Аутентификация через Telegram
+  // Аутентификация через Telegram - просто по ID пользователя
   const authenticateTelegram = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Получаем initData из Telegram через публичный метод
-      const initDataRaw = window.Telegram?.WebApp?.initData;
+      // Получаем данные пользователя из Telegram WebApp
+      const tgUser = initDataUnsafe?.user;
 
-      if (!initDataRaw) {
-        throw new Error('Telegram initData not available');
+      if (!tgUser || !tgUser.id) {
+        throw new Error('Telegram user data not available');
       }
 
-      // Отправляем на backend для проверки подписи
+      console.log(`🔐 Authenticating Telegram user: ${tgUser.id} (${tgUser.first_name})`);
+
+      // Отправляем на backend просто user_id и основную информацию
       const response = await fetch(`${BACKEND_URL}/api/auth/telegram`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ initData: initDataRaw }),
+        body: JSON.stringify({
+          user_id: tgUser.id,
+          first_name: tgUser.first_name,
+          last_name: tgUser.last_name || undefined,
+          username: tgUser.username || undefined,
+        }),
       });
 
       if (!response.ok) {
@@ -94,12 +102,12 @@ export const useAuth = () => {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Authentication error';
       setError(errorMsg);
-      console.error('❌ Auth error:', err);
+      console.error('❌ Auth error:', errorMsg);
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [initDataUnsafe]);
 
   // Logout
   const logout = useCallback(() => {
@@ -108,6 +116,7 @@ export const useAuth = () => {
     setIsAuthenticated(false);
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
+    console.log('👋 Logged out');
   }, []);
 
   return {
@@ -119,6 +128,7 @@ export const useAuth = () => {
     authenticateTelegram,
     logout,
     backendUrl: BACKEND_URL,
+    telegramReady: isReady,
   };
 };
 
