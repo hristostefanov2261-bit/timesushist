@@ -39,15 +39,27 @@ const AppContent: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showPeriodModal, setShowPeriodModal] = useState(false);
 
-  // Аутентификация при загрузке приложения
+  // Аутентификация при загрузке приложения (только один раз)
   useEffect(() => {
+    let mounted = true;
+
     if (!isAuthenticated && !authLoading && telegramReady) {
-      authenticateTelegram().catch((err) => {
-        console.error('Failed to authenticate:', err);
-        addNotification('Ошибка аутентификации', 'error');
-      });
+      authenticateTelegram()
+        .then(() => {
+          if (mounted) console.log('✅ Authentication successful');
+        })
+        .catch((err) => {
+          if (mounted) {
+            console.error('Failed to authenticate:', err);
+            addNotification('Ошибка аутентификации', 'error');
+          }
+        });
     }
-  }, [isAuthenticated, authLoading, telegramReady, authenticateTelegram, addNotification]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [isAuthenticated, authLoading, telegramReady]);
 
   // Get current shift for editor
   const currentShift = selectedDate

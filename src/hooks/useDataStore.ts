@@ -219,31 +219,31 @@ export const useDataStore = () => {
 
   // Recalculate period totals based on shifts
   const getPeriodStats = useCallback(
-    (periodId: string) => {
+    (periodId: string, shifts: Shift[], payments: Payment[]) => {
       const period = data.periods.find((p) => p.id === periodId);
       if (!period) return { total_earnings: 0, total_paid: 0 };
 
-      const shiftsInPeriod = data.shifts.filter(
+      const shiftsInPeriod = shifts.filter(
         (s) => new Date(s.date) >= new Date(period.start_date) && new Date(s.date) <= new Date(period.end_date)
       );
 
       const totalEarnings = shiftsInPeriod.reduce((sum, s) => sum + s.total_earnings, 0);
-      const totalPaid = data.payments
+      const totalPaid = payments
         .filter((p) => p.period_id === periodId)
         .reduce((sum, p) => sum + p.amount, 0);
 
       return { total_earnings: totalEarnings, total_paid: totalPaid };
     },
-    [data.periods, data.shifts, data.payments]
+    [data.periods]
   );
 
-  // Update period stats
+  // Update period stats - only when shifts or payments change
   useEffect(() => {
     setData((prev) => {
       const updated = {
         ...prev,
         periods: prev.periods.map((period) => {
-          const { total_earnings, total_paid } = getPeriodStats(period.id);
+          const { total_earnings, total_paid } = getPeriodStats(period.id, prev.shifts, prev.payments);
           const status =
             total_earnings === 0
               ? 'open'
@@ -263,7 +263,7 @@ export const useDataStore = () => {
       };
       return updated;
     });
-  }, [data.shifts, data.payments, getPeriodStats]);
+  }, [getPeriodStats]);
 
   return {
     data,
