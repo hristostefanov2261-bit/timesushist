@@ -74,24 +74,41 @@ export const useAuth = () => {
       setError(null);
 
       console.log(`🔐 Authenticating: ${tgUser.id} (${tgUser.first_name})`);
+      console.log(`📍 Backend URL: ${BACKEND_URL}`);
+
+      const payload = {
+        user_id: tgUser.id,
+        first_name: tgUser.first_name,
+        last_name: tgUser.last_name || undefined,
+        username: tgUser.username || undefined,
+      };
+
+      console.log('📤 Sending payload:', payload);
 
       const response = await fetch(`${BACKEND_URL}/api/auth/telegram`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: tgUser.id,
-          first_name: tgUser.first_name,
-          last_name: tgUser.last_name || undefined,
-          username: tgUser.username || undefined,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
 
+      console.log('📥 Response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Auth failed');
+        let errorData = {};
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = { error: await response.text() };
+        }
+        console.error('❌ Server error:', errorData);
+        throw new Error((errorData as any).error || `HTTP ${response.status}`);
       }
 
       const data: AuthResponse = await response.json();
+      console.log('✅ Auth response received:', { user: data.user.first_name, token: data.token ? '***' : 'none' });
 
       setUser(data.user);
       setToken(data.token);
@@ -102,9 +119,10 @@ export const useAuth = () => {
 
       console.log('✅ Authenticated:', data.user.first_name);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Auth error';
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('❌ Auth error details:', err);
+      console.error('❌ Auth error message:', msg);
       setError(msg);
-      console.error('❌ Auth failed:', msg);
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
