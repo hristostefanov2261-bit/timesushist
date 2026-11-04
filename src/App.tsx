@@ -17,7 +17,7 @@ import './index.css';
 type Tab = 'calendar' | 'periods' | 'payments' | 'statistics';
 
 const AppContent: React.FC = () => {
-  const { user, token, isLoading: authLoading, isAuthenticated, authenticateTelegram, logout } = useAuth();
+  const { user, token, isLoading: authLoading, error: authError, isAuthenticated, authenticateTelegram, logout } = useAuth();
   const { addNotification, notifications } = useNotification();
   const { isReady: telegramReady } = useTelegramWebApp();
   const {
@@ -39,31 +39,17 @@ const AppContent: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showPeriodModal, setShowPeriodModal] = useState(false);
 
-  // Аутентификация при загрузке приложения (только один раз)
+  // Показываем экран загрузки только в самом начале (очень короткое время)
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
   useEffect(() => {
-    let mounted = true;
+    // Ждём максимум 3 секунды, потом всё равно показываем контент
+    const timer = setTimeout(() => {
+      setInitialLoadComplete(true);
+    }, 3000);
 
-    const attemptAuth = async () => {
-      if (!isAuthenticated && !authLoading) {
-        try {
-          console.log('🔐 Attempting authentication...');
-          await authenticateTelegram();
-          if (mounted) console.log('✅ Authentication successful');
-        } catch (err) {
-          if (mounted) {
-            console.error('Failed to authenticate:', err);
-            addNotification('Ошибка аутентификации', 'error');
-          }
-        }
-      }
-    };
-
-    attemptAuth();
-
-    return () => {
-      mounted = false;
-    };
-  }, [isAuthenticated, authLoading]);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Get current shift for editor
   const currentShift = selectedDate
@@ -171,7 +157,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  if (isLoading || authLoading) {
+  if (!initialLoadComplete || authLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral">
         <div className="text-center">
@@ -186,11 +172,13 @@ const AppContent: React.FC = () => {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral">
         <div className="text-center px-4">
-          <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-            <Calendar size={32} className="text-primary" />
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+            <Calendar size={32} className="text-red-600" />
           </div>
           <h1 className="text-2xl font-bold mb-2">TimeSushist</h1>
-          <p className="text-gray-600 mb-6">Не удалось выполнить вход через Telegram</p>
+          <p className="text-gray-600 mb-2">Ошибка аутентификации</p>
+          {authError && <p className="text-red-600 text-sm mb-4">{authError}</p>}
+          <p className="text-gray-500 text-xs mb-6">Откройте приложение из Telegram бота @BOBER_NANO_bot</p>
           <Button onClick={() => authenticateTelegram()}>
             Попробовать ещё раз
           </Button>

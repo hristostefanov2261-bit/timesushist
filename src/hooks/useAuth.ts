@@ -24,12 +24,14 @@ export const useAuth = () => {
   const { initDataUnsafe, isReady } = useTelegramWebApp();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasAttemptedAuth, setHasAttemptedAuth] = useState(false);
 
-  // Проверяем сохранённый токен при загрузке
+  // На загрузке проверяем сохранённый токен
   useEffect(() => {
+    console.log('🔍 useAuth: Checking for saved token...');
     const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
     const savedUser = localStorage.getItem(AUTH_USER_KEY);
 
@@ -38,38 +40,44 @@ export const useAuth = () => {
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
         setIsAuthenticated(true);
-        console.log('✅ Restored session from localStorage');
+        setHasAttemptedAuth(true);
+        console.log('✅ useAuth: Restored session from localStorage');
+        return;
       } catch (err) {
-        console.error('Failed to restore auth:', err);
+        console.error('useAuth: Failed to restore session:', err);
         localStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_USER_KEY);
       }
     }
 
-    setIsLoading(false);
+    // Нет сохранённого токена, пробуем аутентифицироваться
+    setHasAttemptedAuth(true);
   }, []);
 
-  // Аутентификация через Telegram - просто по ID пользователя
+  // Аутентификация через Telegram
   const authenticateTelegram = useCallback(async () => {
+    // Если уже аутентифицированы, выходим
+    if (isAuthenticated) {
+      console.log('✅ Already authenticated');
+      return;
+    }
+
+    // Если нет данных от Telegram, выходим
+    const tgUser = initDataUnsafe?.user;
+    if (!tgUser || !tgUser.id) {
+      console.warn('⚠️ Telegram user data not available yet');
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
 
-      // Получаем данные пользователя из Telegram WebApp
-      const tgUser = initDataUnsafe?.user;
+      console.log(`🔐 Authenticating: ${tgUser.id} (${tgUser.first_name})`);
 
-      if (!tgUser || !tgUser.id) {
-        throw new Error('Telegram user data not available');
-      }
-
-      console.log(`🔐 Authenticating Telegram user: ${tgUser.id} (${tgUser.first_name})`);
-
-      // Отправляем на backend просто user_id и основную информацию
       const response = await fetch(`${BACKEND_URL}/api/auth/telegram`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: tgUser.id,
           first_name: tgUser.first_name,
@@ -80,36 +88,37 @@ export const useAuth = () => {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Authentication failed');
+        throw new Error(data.error || 'Auth failed');
       }
 
       const data: AuthResponse = await response.json();
 
-      if (data.success) {
-        setUser(data.user);
-        setToken(data.token);
-        setIsAuthenticated(true);
+      setUser(data.user);
+      setToken(data.token);
+      setIsAuthenticated(true);
 
-        // Сохраняем токен и пользователя локально
-        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
-        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
+      localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
 
-        console.log('✅ Authenticated as:', data.user.first_name);
-        return data;
-      } else {
-        throw new Error(data.error || 'Authentication failed');
-      }
+      console.log('✅ Authenticated:', data.user.first_name);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Authentication error';
-      setError(errorMsg);
-      console.error('❌ Auth error:', errorMsg);
-      throw err;
+      const msg = err instanceof Error ? err.message : 'Auth error';
+      setError(msg);
+      console.error('❌ Auth failed:', msg);
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
-  }, [initDataUnsafe]);
+  }, [initDataUnsafe, isAuthenticated]);
 
-  // Logout
+  // Пробуем аутентифицироваться когда Telegram готов и есть данные
+  useEffect(() => {
+    if (isReady && hasAttemptedAuth && !isAuthenticated && initDataUnsafe?.user) {
+      console.log('📱 Telegram ready, attempting auth...');
+      authenticateTelegram();
+    }
+  }, [isReady, hasAttemptedAuth, isAuthenticated, initDataUnsafe, authenticateTelegram]);
+
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
@@ -128,11 +137,9 @@ export const useAuth = () => {
     authenticateTelegram,
     logout,
     backendUrl: BACKEND_URL,
-    telegramReady: isReady,
   };
 };
 
-// Хук для получения headers с токеном для API запросов
 export const useAuthHeaders = (token: string | null) => {
   return {
     'Authorization': token ? `Bearer ${token}` : '',
