@@ -178,7 +178,7 @@ const AppContent: React.FC = () => {
           <h1 className="text-2xl font-bold mb-2">TimeSushist</h1>
           <p className="text-gray-600 mb-2">Ошибка аутентификации</p>
           {authError && <p className="text-red-600 text-sm mb-4">{authError}</p>}
-          <p className="text-gray-500 text-xs mb-6">Откройте приложение из Telegram бота @BOBER_NANO_bot</p>
+          <p className="text-gray-500 text-xs mb-6">Откройте приложение из Telegram бота @timesushist_bot</p>
           <Button onClick={() => authenticateTelegram()}>
             Попробовать ещё раз
           </Button>
