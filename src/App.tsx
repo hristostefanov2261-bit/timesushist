@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, BarChart3, CreditCard, LogOut } from 'lucide-react';
+import { Calendar, BarChart3, CreditCard } from 'lucide-react';
 import { AppProvider, useNotification } from './contexts/AppContext';
 import { Calendar as CalendarView } from './components/Calendar';
 import { PeriodsView } from './components/PeriodsView';
@@ -7,19 +7,21 @@ import { PaymentsView } from './components/PaymentsView';
 import { StatisticsView } from './components/StatisticsView';
 import { ShiftEditor } from './components/ShiftEditor';
 import { SettingsModal } from './components/SettingsModal';
-import { Modal, Button } from './components/UI';
+import { Modal, Button, Toast } from './components/UI';
 import { useDataStore } from './hooks/useDataStore';
-import { useTelegramWebApp } from './hooks/useTelegramWebApp';
 import { useAuth } from './hooks/useAuth';
-import { Toast } from './components/UI';
 import './index.css';
 
 type Tab = 'calendar' | 'periods' | 'payments' | 'statistics';
 
 const AppContent: React.FC = () => {
-  const { user, token, isLoading: authLoading, error: authError, isAuthenticated, authenticateTelegram, logout } = useAuth();
+  const { user, isLoading: authLoading, error: authError, isAuthenticated, generateCode, verifyCode, logout } = useAuth();
   const { addNotification, notifications } = useNotification();
-  const { isReady: telegramReady } = useTelegramWebApp();
+
+  // Код-экран состояние
+  const [authScreen, setAuthScreen] = useState<'choose' | 'enter_code'>('choose');
+  const [inputCode, setInputCode] = useState('');
+  const [authActionLoading, setAuthActionLoading] = useState(false);
   const {
     data,
     isLoading,
@@ -157,7 +159,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  if (!initialLoadComplete || authLoading) {
+  if (!initialLoadComplete) {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral">
         <div className="text-center">
@@ -169,19 +171,80 @@ const AppContent: React.FC = () => {
   }
 
   if (!isAuthenticated) {
+    // Экран ввода кода
+    if (authScreen === 'enter_code') {
+      return (
+        <div className="flex items-center justify-center h-screen bg-neutral px-4">
+          <div className="w-full max-w-xs">
+            <button
+              onClick={() => { setAuthScreen('choose'); setInputCode(''); }}
+              className="text-sm text-gray-500 mb-6 flex items-center gap-1 hover:text-gray-700"
+            >
+              ← Назад
+            </button>
+            <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+              <Calendar size={28} className="text-blue-600" />
+            </div>
+            <h1 className="text-xl font-bold text-center mb-1">Войти по коду</h1>
+            <p className="text-gray-500 text-sm text-center mb-6">
+              Введи свой 6-значный код
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={inputCode}
+              onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-center text-2xl tracking-widest font-mono mb-3 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {authError && <p className="text-red-500 text-sm text-center mb-3">{authError}</p>}
+            <Button
+              className="w-full"
+              disabled={inputCode.length !== 6 || authActionLoading}
+              onClick={async () => {
+                setAuthActionLoading(true);
+                await verifyCode(inputCode);
+                setAuthActionLoading(false);
+              }}
+            >
+              {authActionLoading ? 'Проверяю...' : 'Войти'}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Экран выбора: новый или войти
     return (
-      <div className="flex items-center justify-center h-screen bg-neutral">
-        <div className="text-center px-4">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-            <Calendar size={32} className="text-red-600" />
+      <div className="flex items-center justify-center h-screen bg-neutral px-4">
+        <div className="w-full max-w-xs text-center">
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-5">
+            <Calendar size={32} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold mb-2">TimeSushist</h1>
-          <p className="text-gray-600 mb-2">Ошибка аутентификации</p>
-          {authError && <p className="text-red-600 text-sm mb-4">{authError}</p>}
-          <p className="text-gray-500 text-xs mb-6">Откройте приложение из Telegram бота @timesushist_bot</p>
-          <Button onClick={() => authenticateTelegram()}>
-            Попробовать ещё раз
+          <p className="text-gray-500 text-sm mb-8">Учёт рабочих смен и выплат</p>
+
+          {authError && <p className="text-red-500 text-sm mb-4">{authError}</p>}
+
+          <Button
+            className="w-full mb-3"
+            disabled={authActionLoading}
+            onClick={async () => {
+              setAuthActionLoading(true);
+              await generateCode();
+              setAuthActionLoading(false);
+            }}
+          >
+            {authActionLoading ? 'Создаю аккаунт...' : 'Создать новый аккаунт'}
           </Button>
+
+          <button
+            onClick={() => { setAuthScreen('enter_code'); }}
+            className="w-full py-3 text-sm text-primary font-medium hover:underline"
+          >
+            У меня уже есть код
+          </button>
         </div>
       </div>
     );
